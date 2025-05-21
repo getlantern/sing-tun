@@ -1,6 +1,6 @@
 module github.com/sagernet/sing-tun
 
-go 1.20
+go 1.23.0
 
 require (
 	github.com/go-ole/go-ole v1.3.0
@@ -12,8 +12,8 @@ require (
 	github.com/sagernet/sing v0.6.0-beta.2
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba
 	golang.org/x/exp v0.0.0-20240613232115-7f521ea00fb8
-	golang.org/x/net v0.26.0
-	golang.org/x/sys v0.26.0
+	golang.org/x/net v0.38.0
+	golang.org/x/sys v0.31.0
 )
 
 require (
