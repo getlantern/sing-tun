@@ -67,8 +67,15 @@ func (e *DarwinEndpoint) dispatchLoop() {
 		var networkProtocol tcpip.NetworkProtocolNumber
 		switch header.IPVersion(packet) {
 		case header.IPv4Version:
+			ipv4Header := header.IPv4(packet)
 			networkProtocol = header.IPv4ProtocolNumber
-			if header.IPv4(packet).DestinationAddress().As4() == e.tun.inet4Address {
+			if ipv4Header.DestinationAddress().As4() == e.tun.inet4Address {
+				// if this is the first TCP SYN packet, setting TTL
+				if ipv4Header.TransportProtocol() == header.TCPProtocolNumber &&
+					header.TCPFlags(ipv4Header.Flags()).Contains(header.TCPFlagSyn) &&
+					!header.TCPFlags(ipv4Header.Flags()).Contains(header.TCPFlagAck) {
+					ipv4Header.SetTTL(5)
+				}
 				e.tun.tunFile.Write(packetBuffer[:n])
 				continue
 			}
