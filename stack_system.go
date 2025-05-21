@@ -16,7 +16,7 @@ import (
 	"github.com/sagernet/sing/common/logger"
 	M "github.com/sagernet/sing/common/metadata"
 	N "github.com/sagernet/sing/common/network"
-	"github.com/sagernet/sing/common/udpnat2"
+	udpnat "github.com/sagernet/sing/common/udpnat2"
 )
 
 var ErrIncludeAllNetworks = E.New("`system` and `mixed` stack are not available when `includeAllNetworks` is enabled. See https://github.com/SagerNet/sing-tun/issues/25")
@@ -364,6 +364,10 @@ func (s *System) processIPv4TCP(ipHdr header.IPv4, tcpHdr header.TCP) (bool, err
 		tcpHdr.SetSourcePort(natPort)
 		ipHdr.SetDestinationAddr(s.inet4ServerAddress)
 		tcpHdr.SetDestinationPort(s.tcpPort)
+	}
+	// checking if it's the first SYN packet and setting the TTL
+	if tcpHdr.Flags().Contains(header.TCPFlagSyn) && !tcpHdr.Flags().Contains(header.TCPFlagAck) {
+		ipHdr.SetTTL(5)
 	}
 	if !s.txChecksumOffload {
 		tcpHdr.SetChecksum(0)
