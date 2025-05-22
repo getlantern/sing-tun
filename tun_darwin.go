@@ -82,7 +82,6 @@ func New(options Options) (Tun, error) {
 }
 
 func (t *NativeTun) Start() error {
-	t.options.InterfaceMonitor.RegisterMyInterface(t.options.Name)
 	return t.setRoutes()
 }
 
