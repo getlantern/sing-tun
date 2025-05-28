@@ -56,6 +56,11 @@ func (c *gLazyConn) HandshakeContext(ctx context.Context) error {
 	}
 	c.request.Complete(false)
 	endpoint.SocketOptions().SetKeepAlive(true)
+	// This operation only affects operations after the handshake and
+	// it's only being respected by the server side, not the client,
+	// independent if it's a direct request or a proxied request through
+	// other protocols like wireguard
+	endpoint.SetSockOptInt(tcpip.IPv4TTLOption, 5)
 	endpoint.SetSockOpt(common.Ptr(tcpip.KeepaliveIdleOption(15 * time.Second)))
 	endpoint.SetSockOpt(common.Ptr(tcpip.KeepaliveIntervalOption(15 * time.Second)))
 	tcpConn := gonet.NewTCPConn(&wq, endpoint)

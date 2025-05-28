@@ -160,5 +160,14 @@ func NewGVisorStack(ep stack.LinkEndpoint) (*stack.Stack, error) {
 	if err != nil {
 		return nil, gonet.TranslateNetstackError(err)
 	}
+	// This operation set all TCP IP TTL to 5 (independent if it's SYN, ACK, FIN) and
+	// it's only being respected by the server side, not the client,
+	// independent if it's a direct request or a proxied request through
+	// other protocols like wireguard
+
+	ttl := tcpip.DefaultTTLOption(5)
+	if err := ipStack.SetNetworkProtocolOption(ipv4.ProtocolNumber, &ttl); err != nil {
+		return nil, gonet.TranslateNetstackError(err)
+	}
 	return ipStack, nil
 }
