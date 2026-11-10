@@ -41,8 +41,8 @@ type System struct {
 	inet6LoopbackAddress []netip.Addr
 	udpTimeout           time.Duration
 	icmpTimeout          time.Duration
-	tcpListener          net.Listener
-	tcpListener6         net.Listener
+	tcpListener          *forwarderListener
+	tcpListener6         *forwarderListener
 	tcpPort              uint16
 	tcpPort6             uint16
 	tcpNat               *TCPNat
@@ -144,9 +144,9 @@ func (s *System) start() error {
 		if err != nil {
 			return err
 		}
-		s.tcpListener = tcpListener
+		s.tcpListener = newForwarderListener(s.ctx, s.logger, listener, "tcp4", tcpListener)
 		s.tcpPort = M.SocksaddrFromNet(tcpListener.Addr()).Port
-		go s.acceptLoop(tcpListener)
+		go s.acceptLoop(s.tcpListener)
 		s.logger.Debug("tcp4 forwarder listening on port ", s.tcpPort, ": ", s.forwarderInterfaces(tcpListener))
 	}
 	if s.inet6NextAddress.IsValid() {
@@ -160,9 +160,9 @@ func (s *System) start() error {
 		if err != nil {
 			return err
 		}
-		s.tcpListener6 = tcpListener
+		s.tcpListener6 = newForwarderListener(s.ctx, s.logger, listener, "tcp6", tcpListener)
 		s.tcpPort6 = M.SocksaddrFromNet(tcpListener.Addr()).Port
-		go s.acceptLoop(tcpListener)
+		go s.acceptLoop(s.tcpListener6)
 		s.logger.Debug("tcp6 forwarder listening on port ", s.tcpPort6, ": ", s.forwarderInterfaces(tcpListener))
 	}
 	s.tcpNat = NewNat(s.ctx, s.udpTimeout)
@@ -327,7 +327,7 @@ func (s *System) processPacket(packet []byte) bool {
 	return writeBack
 }
 
-func (s *System) acceptLoop(listener net.Listener) {
+func (s *System) acceptLoop(listener *forwarderListener) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {

@@ -40,16 +40,17 @@ func TestLogUnacceptedResetIsRateLimited(t *testing.T) {
 	require.NoError(t, err)
 	defer listener.Close()
 	log := &debugCounter{}
+	forwarder := newForwarderListener(t.Context(), log, net.ListenConfig{}, "tcp4", listener)
 	stack := &System{logger: log, tunName: "tun-test0"}
 	for range 100 {
-		stack.logUnacceptedReset("tcp4", listener, 10001)
+		stack.logUnacceptedReset("tcp4", forwarder, 10001)
 	}
 	require.Eventually(t, func() bool { return log.count() == 1 }, time.Second, 10*time.Millisecond)
 	require.Never(t, func() bool { return log.count() > 1 }, 200*time.Millisecond, 10*time.Millisecond)
 	require.NotContains(t, log.last(), "127.0.0.1")
 
 	stack.lastUnacceptedReset.Store(0)
-	stack.logUnacceptedReset("tcp4", listener, 10002)
+	stack.logUnacceptedReset("tcp4", forwarder, 10002)
 	require.Eventually(t, func() bool { return log.count() == 2 }, time.Second, 10*time.Millisecond)
 }
 

@@ -18,14 +18,18 @@ const unacceptedResetLogInterval = 5 * time.Second
 // logUnacceptedReset logs that the kernel reset a connection the forwarder
 // never accepted. It runs on the packet path, so it does at most one check
 // there and gathers the interface indexes on its own goroutine.
-func (s *System) logUnacceptedReset(network string, listener net.Listener, natPort uint16) {
+func (s *System) logUnacceptedReset(network string, listener *forwarderListener, natPort uint16) {
 	now := time.Now().UnixNano()
 	last := s.lastUnacceptedReset.Load()
 	if now-last < int64(unacceptedResetLogInterval) || !s.lastUnacceptedReset.CompareAndSwap(last, now) {
 		return
 	}
 	go func() {
-		s.logger.Debug(network, " forwarder reset a connection it never accepted, nat port ", natPort, ": ", s.forwarderInterfaces(listener))
+		current := listener.current()
+		if current == nil {
+			return
+		}
+		s.logger.Debug(network, " forwarder reset a connection it never accepted, nat port ", natPort, ": ", s.forwarderInterfaces(current))
 	}()
 }
 
