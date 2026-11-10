@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+
+	"github.com/sagernet/sing-tun/internal/gtcpip/header"
 )
 
 // unacceptedResetLogInterval bounds how often a reset the forwarder never
@@ -25,6 +27,14 @@ func (s *System) logUnacceptedReset(network string, listener net.Listener, natPo
 	go func() {
 		s.logger.Debug(network, " forwarder reset a connection it never accepted, nat port ", natPort, ": ", s.forwarderInterfaces(listener))
 	}()
+}
+
+// isOpeningSYN reports whether the segment opens a connection. A connection is
+// accepted only once its handshake completes, so a retransmitted SYN never
+// belongs to an accepted one.
+func isOpeningSYN(tcpHdr header.TCP) bool {
+	flags := tcpHdr.Flags()
+	return flags.Contains(header.TCPFlagSyn) && !flags.Contains(header.TCPFlagAck)
 }
 
 // forwarderInterfaces compares the interface the TCP forwarder's listener is

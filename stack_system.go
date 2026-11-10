@@ -424,6 +424,9 @@ func (s *System) processIPv4TCP(ipHdr header.IPv4, tcpHdr header.TCP) (bool, err
 					return false, s.resetIPv4TCP(ipHdr, tcpHdr)
 				}
 			}
+			if isOpeningSYN(tcpHdr) {
+				s.tcpNat.markOpening(natPort)
+			}
 			ipHdr.SetSourceAddr(s.inet4NextAddress)
 			tcpHdr.SetSourcePort(natPort)
 			ipHdr.SetDestinationAddr(s.inet4Address)
@@ -521,6 +524,9 @@ func (s *System) processIPv6TCP(ipHdr header.IPv6, tcpHdr header.TCP) (bool, err
 				} else {
 					return false, s.resetIPv6TCP(ipHdr, tcpHdr)
 				}
+			}
+			if isOpeningSYN(tcpHdr) {
+				s.tcpNat.markOpening(natPort)
 			}
 			ipHdr.SetSourceAddr(s.inet6NextAddress)
 			tcpHdr.SetSourcePort(natPort)

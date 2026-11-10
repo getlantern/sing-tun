@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sagernet/sing-tun/internal/gtcpip/header"
 	"github.com/sagernet/sing/common/logger"
 
 	"github.com/stretchr/testify/require"
@@ -74,4 +75,20 @@ func (l *debugCounter) last() string {
 	l.access.Lock()
 	defer l.access.Unlock()
 	return strings.Join(l.messages[len(l.messages)-1:], "")
+}
+
+func TestOpeningSYNClearsAccepted(t *testing.T) {
+	nat := &TCPNat{portMap: map[uint16]*TCPSession{10001: {}}}
+	session := nat.portMap[10001]
+	session.accepted.Store(true)
+
+	segment := header.TCP(make([]byte, header.TCPMinimumSize))
+	segment.Encode(&header.TCPFields{Flags: header.TCPFlagSyn | header.TCPFlagAck, DataOffset: header.TCPMinimumSize})
+	require.False(t, isOpeningSYN(segment))
+	segment.Encode(&header.TCPFields{Flags: header.TCPFlagSyn, DataOffset: header.TCPMinimumSize})
+	require.True(t, isOpeningSYN(segment))
+
+	nat.markOpening(10001)
+	require.False(t, session.accepted.Load())
+	nat.markOpening(10002)
 }

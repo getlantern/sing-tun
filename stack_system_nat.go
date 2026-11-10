@@ -88,6 +88,17 @@ func (n *TCPNat) LookupBack(port uint16) *TCPSession {
 	return session
 }
 
+// markOpening clears the session's accepted flag when a client opens a new
+// connection on a tuple whose session hasn't expired yet.
+func (n *TCPNat) markOpening(port uint16) {
+	n.portAccess.RLock()
+	session := n.portMap[port]
+	n.portAccess.RUnlock()
+	if session != nil {
+		session.accepted.Store(false)
+	}
+}
+
 func (n *TCPNat) Lookup(source netip.AddrPort, destination netip.AddrPort, handler Handler) (uint16, error) {
 	key := tcpNatKey{Source: source, Destination: destination}
 	n.addrAccess.RLock()
