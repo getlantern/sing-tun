@@ -2,8 +2,11 @@ package tun
 
 import (
 	"context"
+	"errors"
 	"net"
+	"reflect"
 	"sync"
+	"syscall"
 	"time"
 
 	E "github.com/sagernet/sing/common/exceptions"
@@ -92,7 +95,6 @@ func (f *forwarderListener) relisten(dead net.Listener) error {
 		if err == nil {
 			f.listener = listener
 			f.access.Unlock()
-			f.logger.Info(f.network, " forwarder listening again")
 			return nil
 		}
 		f.access.Unlock()
@@ -113,4 +115,17 @@ func (f *forwarderListener) Close() error {
 	defer f.access.Unlock()
 	f.closed = true
 	return f.listener.Close()
+}
+
+// errorWithoutAddress describes err by its errno, or failing that its type,
+// because a net.OpError's text includes the socket's addresses.
+func errorWithoutAddress(err error) string {
+	var errno syscall.Errno
+	if errors.As(err, &errno) {
+		return errno.Error()
+	}
+	if errors.Is(err, net.ErrClosed) {
+		return "use of closed network connection"
+	}
+	return reflect.TypeOf(err).String()
 }

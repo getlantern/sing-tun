@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net"
 	"net/netip"
-	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -53,8 +52,6 @@ type System struct {
 	frontHeadroom        int
 	txChecksumOffload    bool
 	multiPendingPackets  bool
-	// lastUnacceptedReset is when logUnacceptedReset last logged, in unix nanoseconds.
-	lastUnacceptedReset atomic.Int64
 }
 
 type Session struct {
@@ -147,7 +144,6 @@ func (s *System) start() error {
 		s.tcpListener = newForwarderListener(s.ctx, s.logger, listener, "tcp4", tcpListener)
 		s.tcpPort = M.SocksaddrFromNet(tcpListener.Addr()).Port
 		go s.acceptLoop(s.tcpListener)
-		s.logger.Debug("tcp4 forwarder listening on port ", s.tcpPort, ": ", s.forwarderInterfaces(tcpListener))
 	}
 	if s.inet6NextAddress.IsValid() {
 		for range 3 {
@@ -163,7 +159,6 @@ func (s *System) start() error {
 		s.tcpListener6 = newForwarderListener(s.ctx, s.logger, listener, "tcp6", tcpListener)
 		s.tcpPort6 = M.SocksaddrFromNet(tcpListener.Addr()).Port
 		go s.acceptLoop(s.tcpListener6)
-		s.logger.Debug("tcp6 forwarder listening on port ", s.tcpPort6, ": ", s.forwarderInterfaces(tcpListener))
 	}
 	s.tcpNat = NewNat(s.ctx, s.udpTimeout)
 	s.udpNat = udpnat.New(s.handler, s.preparePacketConnection, s.udpTimeout, false)
@@ -342,7 +337,6 @@ func (s *System) acceptLoop(listener *forwarderListener) {
 			s.logger.Trace(E.New("unknown session with port ", connPort))
 			continue
 		}
-		session.accepted.Store(true)
 		go s.handler.NewConnectionEx(s.ctx, conn, M.SocksaddrFromNetIP(session.Source), M.SocksaddrFromNetIP(session.Destination), nil)
 	}
 }
@@ -398,9 +392,6 @@ func (s *System) processIPv4TCP(ipHdr header.IPv4, tcpHdr header.TCP) (bool, err
 		if session == nil {
 			return false, E.New("ipv4: tcp: session not found: ", destination.Port())
 		}
-		if tcpHdr.Flags().Contains(header.TCPFlagRst) && !session.accepted.Load() {
-			s.logUnacceptedReset("tcp4", s.tcpListener, destination.Port())
-		}
 		ipHdr.SetSourceAddr(session.Destination.Addr())
 		tcpHdr.SetSourcePort(session.Destination.Port())
 		ipHdr.SetDestinationAddr(session.Source.Addr())
@@ -423,9 +414,6 @@ func (s *System) processIPv4TCP(ipHdr header.IPv4, tcpHdr header.TCP) (bool, err
 				} else {
 					return false, s.resetIPv4TCP(ipHdr, tcpHdr)
 				}
-			}
-			if isOpeningSYN(tcpHdr) {
-				s.tcpNat.markOpening(natPort)
 			}
 			ipHdr.SetSourceAddr(s.inet4NextAddress)
 			tcpHdr.SetSourcePort(natPort)
@@ -499,9 +487,6 @@ func (s *System) processIPv6TCP(ipHdr header.IPv6, tcpHdr header.TCP) (bool, err
 		if session == nil {
 			return false, E.New("ipv6: tcp: session not found: ", destination.Port())
 		}
-		if tcpHdr.Flags().Contains(header.TCPFlagRst) && !session.accepted.Load() {
-			s.logUnacceptedReset("tcp6", s.tcpListener6, destination.Port())
-		}
 		ipHdr.SetSourceAddr(session.Destination.Addr())
 		tcpHdr.SetSourcePort(session.Destination.Port())
 		ipHdr.SetDestinationAddr(session.Source.Addr())
@@ -524,9 +509,6 @@ func (s *System) processIPv6TCP(ipHdr header.IPv6, tcpHdr header.TCP) (bool, err
 				} else {
 					return false, s.resetIPv6TCP(ipHdr, tcpHdr)
 				}
-			}
-			if isOpeningSYN(tcpHdr) {
-				s.tcpNat.markOpening(natPort)
 			}
 			ipHdr.SetSourceAddr(s.inet6NextAddress)
 			tcpHdr.SetSourcePort(natPort)

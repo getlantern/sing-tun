@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/netip"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	M "github.com/sagernet/sing/common/metadata"
@@ -30,8 +29,6 @@ type TCPSession struct {
 	Source      netip.AddrPort
 	Destination netip.AddrPort
 	LastActive  time.Time
-	// accepted is set once the forwarder's listener accepts the connection.
-	accepted atomic.Bool
 }
 
 func NewNat(ctx context.Context, timeout time.Duration) *TCPNat {
@@ -86,17 +83,6 @@ func (n *TCPNat) LookupBack(port uint16) *TCPSession {
 		session.Unlock()
 	}
 	return session
-}
-
-// markOpening clears the session's accepted flag when a client opens a new
-// connection on a tuple whose session hasn't expired yet.
-func (n *TCPNat) markOpening(port uint16) {
-	n.portAccess.RLock()
-	session := n.portMap[port]
-	n.portAccess.RUnlock()
-	if session != nil {
-		session.accepted.Store(false)
-	}
 }
 
 func (n *TCPNat) Lookup(source netip.AddrPort, destination netip.AddrPort, handler Handler) (uint16, error) {
