@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"net/netip"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -52,6 +53,8 @@ type System struct {
 	frontHeadroom        int
 	txChecksumOffload    bool
 	multiPendingPackets  bool
+	// lastUnacceptedReset is when logUnacceptedReset last logged, in unix nanoseconds.
+	lastUnacceptedReset atomic.Int64
 }
 
 type Session struct {
@@ -329,7 +332,7 @@ func (s *System) acceptLoop(listener net.Listener) {
 		conn, err := listener.Accept()
 		if err != nil {
 			if !E.IsClosed(err) {
-				s.logger.Error(E.Cause(err, "tcp forwarder stopped accepting"))
+				s.logger.Error("tcp forwarder stopped accepting: ", errorWithoutAddress(err))
 			}
 			return
 		}
@@ -396,7 +399,7 @@ func (s *System) processIPv4TCP(ipHdr header.IPv4, tcpHdr header.TCP) (bool, err
 			return false, E.New("ipv4: tcp: session not found: ", destination.Port())
 		}
 		if tcpHdr.Flags().Contains(header.TCPFlagRst) && !session.accepted.Load() {
-			s.logger.Debug("tcp4 forwarder reset a connection it never accepted, nat port ", destination.Port(), ": ", s.forwarderInterfaces(s.tcpListener))
+			s.logUnacceptedReset("tcp4", s.tcpListener, destination.Port())
 		}
 		ipHdr.SetSourceAddr(session.Destination.Addr())
 		tcpHdr.SetSourcePort(session.Destination.Port())
@@ -494,7 +497,7 @@ func (s *System) processIPv6TCP(ipHdr header.IPv6, tcpHdr header.TCP) (bool, err
 			return false, E.New("ipv6: tcp: session not found: ", destination.Port())
 		}
 		if tcpHdr.Flags().Contains(header.TCPFlagRst) && !session.accepted.Load() {
-			s.logger.Debug("tcp6 forwarder reset a connection it never accepted, nat port ", destination.Port(), ": ", s.forwarderInterfaces(s.tcpListener6))
+			s.logUnacceptedReset("tcp6", s.tcpListener6, destination.Port())
 		}
 		ipHdr.SetSourceAddr(session.Destination.Addr())
 		tcpHdr.SetSourcePort(session.Destination.Port())
