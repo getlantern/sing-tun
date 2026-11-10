@@ -48,3 +48,18 @@ func TestErrorWithoutAddressDropsAddresses(t *testing.T) {
 	other := &net.OpError{Op: "listen", Net: "tcp", Addr: err.Addr, Err: os.ErrInvalid}
 	require.NotContains(t, errorWithoutAddress(other), "198.51.100.9")
 }
+
+func TestRelistenFailureNamesItsCause(t *testing.T) {
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	require.NoError(t, err)
+	forwarder := newForwarderListener(t.Context(), logger.NOP(), net.ListenConfig{}, "tcp4", listener)
+	forwarder.address = "192.0.2.1:10001"
+
+	err = forwarder.relisten(listener)
+	var relistenErr *relistenError
+	require.ErrorAs(t, err, &relistenErr)
+	description := errorWithoutAddress(err)
+	require.Contains(t, description, "tcp4 forwarder could not listen again: ")
+	require.Contains(t, description, syscall.EADDRNOTAVAIL.Error())
+	require.NotContains(t, description, "192.0.2.1")
+}

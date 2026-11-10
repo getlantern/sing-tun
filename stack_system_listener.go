@@ -9,7 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	E "github.com/sagernet/sing/common/exceptions"
 	"github.com/sagernet/sing/common/logger"
 )
 
@@ -65,7 +64,7 @@ func (f *forwarderListener) Accept() (net.Conn, error) {
 		f.logger.Warn(f.network, " forwarder listener was destroyed (", errorWithoutAddress(err), "), listening again")
 		relistenErr := f.relisten(listener)
 		if relistenErr != nil {
-			return nil, E.Errors(err, relistenErr)
+			return nil, relistenErr
 		}
 	}
 }
@@ -100,11 +99,26 @@ func (f *forwarderListener) relisten(dead net.Listener) error {
 		f.access.Unlock()
 		select {
 		case <-f.ctx.Done():
-			return f.ctx.Err()
+			return net.ErrClosed
 		case <-time.After(relistenDelay):
 		}
 	}
-	return E.New(f.network, " forwarder could not listen again: ", errorWithoutAddress(err))
+	return &relistenError{network: f.network, cause: err}
+}
+
+// relistenError reports that the forwarder could not listen again. Its text
+// names only the last listen's errno.
+type relistenError struct {
+	network string
+	cause   error
+}
+
+func (e *relistenError) Error() string {
+	return e.network + " forwarder could not listen again: " + errorWithoutAddress(e.cause)
+}
+
+func (e *relistenError) Unwrap() error {
+	return e.cause
 }
 
 func (f *forwarderListener) Close() error {
@@ -120,6 +134,10 @@ func (f *forwarderListener) Close() error {
 // errorWithoutAddress describes err by its errno, or failing that its type,
 // because a net.OpError's text includes the socket's addresses.
 func errorWithoutAddress(err error) string {
+	var relistenErr *relistenError
+	if errors.As(err, &relistenErr) {
+		return relistenErr.Error()
+	}
 	var errno syscall.Errno
 	if errors.As(err, &errno) {
 		return errno.Error()
