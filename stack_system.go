@@ -144,6 +144,7 @@ func (s *System) start() error {
 		s.tcpListener = tcpListener
 		s.tcpPort = M.SocksaddrFromNet(tcpListener.Addr()).Port
 		go s.acceptLoop(tcpListener)
+		s.logger.Debug("tcp4 forwarder listening on port ", s.tcpPort, ": ", s.forwarderInterfaces(tcpListener))
 	}
 	if s.inet6NextAddress.IsValid() {
 		for range 3 {
@@ -159,6 +160,7 @@ func (s *System) start() error {
 		s.tcpListener6 = tcpListener
 		s.tcpPort6 = M.SocksaddrFromNet(tcpListener.Addr()).Port
 		go s.acceptLoop(tcpListener)
+		s.logger.Debug("tcp6 forwarder listening on port ", s.tcpPort6, ": ", s.forwarderInterfaces(tcpListener))
 	}
 	s.tcpNat = NewNat(s.ctx, s.udpTimeout)
 	s.udpNat = udpnat.New(s.handler, s.preparePacketConnection, s.udpTimeout, false)
@@ -326,6 +328,9 @@ func (s *System) acceptLoop(listener net.Listener) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
+			if !E.IsClosed(err) {
+				s.logger.Error(E.Cause(err, "tcp forwarder stopped accepting"))
+			}
 			return
 		}
 		connPort := M.SocksaddrFromNet(conn.RemoteAddr()).Port
@@ -334,6 +339,7 @@ func (s *System) acceptLoop(listener net.Listener) {
 			s.logger.Trace(E.New("unknown session with port ", connPort))
 			continue
 		}
+		session.accepted.Store(true)
 		go s.handler.NewConnectionEx(s.ctx, conn, M.SocksaddrFromNetIP(session.Source), M.SocksaddrFromNetIP(session.Destination), nil)
 	}
 }
@@ -388,6 +394,9 @@ func (s *System) processIPv4TCP(ipHdr header.IPv4, tcpHdr header.TCP) (bool, err
 		session := s.tcpNat.LookupBack(destination.Port())
 		if session == nil {
 			return false, E.New("ipv4: tcp: session not found: ", destination.Port())
+		}
+		if tcpHdr.Flags().Contains(header.TCPFlagRst) && !session.accepted.Load() {
+			s.logger.Debug("tcp4 forwarder reset a connection it never accepted, nat port ", destination.Port(), ": ", s.forwarderInterfaces(s.tcpListener))
 		}
 		ipHdr.SetSourceAddr(session.Destination.Addr())
 		tcpHdr.SetSourcePort(session.Destination.Port())
@@ -483,6 +492,9 @@ func (s *System) processIPv6TCP(ipHdr header.IPv6, tcpHdr header.TCP) (bool, err
 		session := s.tcpNat.LookupBack(destination.Port())
 		if session == nil {
 			return false, E.New("ipv6: tcp: session not found: ", destination.Port())
+		}
+		if tcpHdr.Flags().Contains(header.TCPFlagRst) && !session.accepted.Load() {
+			s.logger.Debug("tcp6 forwarder reset a connection it never accepted, nat port ", destination.Port(), ": ", s.forwarderInterfaces(s.tcpListener6))
 		}
 		ipHdr.SetSourceAddr(session.Destination.Addr())
 		tcpHdr.SetSourcePort(session.Destination.Port())

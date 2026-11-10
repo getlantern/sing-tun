@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/netip"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	M "github.com/sagernet/sing/common/metadata"
@@ -29,6 +30,8 @@ type TCPSession struct {
 	Source      netip.AddrPort
 	Destination netip.AddrPort
 	LastActive  time.Time
+	// accepted is set once the forwarder's listener accepts the connection.
+	accepted atomic.Bool
 }
 
 func NewNat(ctx context.Context, timeout time.Duration) *TCPNat {
