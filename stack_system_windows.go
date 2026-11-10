@@ -31,3 +31,7 @@ func fixWindowsFirewall() error {
 func retryableListenError(err error) bool {
 	return errors.Is(err, windows.WSAEADDRNOTAVAIL)
 }
+
+func listenerDestroyed(error) bool {
+	return false
+}

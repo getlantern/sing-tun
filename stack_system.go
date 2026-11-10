@@ -43,8 +43,8 @@ type System struct {
 	inet6LoopbackAddress []netip.Addr
 	udpTimeout           time.Duration
 	icmpTimeout          time.Duration
-	tcpListener          net.Listener
-	tcpListener6         net.Listener
+	tcpListener          *forwarderListener
+	tcpListener6         *forwarderListener
 	tcpPort              uint16
 	tcpPort6             uint16
 	tcpNat4              *TCPNat
@@ -166,10 +166,10 @@ func (s *System) start() error {
 		if err != nil {
 			return err
 		}
-		s.tcpListener = tcpListener
+		s.tcpListener = newForwarderListener(s.ctx, s.logger, s.netNs, listener, "tcp4", tcpListener)
 		s.tcpPort = M.SocksaddrFromNet(tcpListener.Addr()).Port
 		s.tcpNat4 = NewNat(s.ctx, s.udpTimeout)
-		go s.acceptLoop(tcpListener, s.tcpNat4)
+		go s.acceptLoop(s.tcpListener, s.tcpNat4)
 	}
 	if s.inet6NextAddress.IsValid() {
 		for range 3 {
@@ -182,10 +182,10 @@ func (s *System) start() error {
 		if err != nil {
 			return err
 		}
-		s.tcpListener6 = tcpListener
+		s.tcpListener6 = newForwarderListener(s.ctx, s.logger, s.netNs, listener, "tcp6", tcpListener)
 		s.tcpPort6 = M.SocksaddrFromNet(tcpListener.Addr()).Port
 		s.tcpNat6 = NewNat(s.ctx, s.udpTimeout)
-		go s.acceptLoop(tcpListener, s.tcpNat6)
+		go s.acceptLoop(s.tcpListener6, s.tcpNat6)
 	}
 	udpNATOptions := s.udpNATOptions
 	udpNATOptions.Handler = s.handler
@@ -387,10 +387,13 @@ func (s *System) processPacket(packet []byte) bool {
 	return writeBack
 }
 
-func (s *System) acceptLoop(listener net.Listener, tcpNat *TCPNat) {
+func (s *System) acceptLoop(listener *forwarderListener, tcpNat *TCPNat) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
+			if !E.IsClosed(err) {
+				s.logger.Error("tcp forwarder stopped accepting: ", errorWithoutAddress(err))
+			}
 			return
 		}
 		connPort := M.SocksaddrFromNet(conn.RemoteAddr()).Port
